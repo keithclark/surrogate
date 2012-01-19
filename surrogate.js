@@ -14,10 +14,22 @@
  */
 
 (function(){
-	
-	var donor = document.createElement("div");
+	var doc = document;
+	var docElm = doc.documentElement;
 	var AP = Array.prototype;
+	var HP = HTMLElement.prototype;
+	var donor = doc.createElement("div");
 	
+	var getMember = function(obj, member) {
+		var prefixes = "moz webkit o ms".split(" ");
+		var uCase = member.charAt(0).toUpperCase() + member.slice(1);
+		return obj[member] || prefixes.some( function( prefix ) {
+			return (member = prefix+uCase) && obj[member];
+		}) && obj[member];
+	};
+
+	var matchesSelector = getMember( HP, "matchesSelector" );
+
 	function forEach( ctx, fn ) {
 		AP.forEach.call( ctx, fn );
 		return ctx;
@@ -29,11 +41,22 @@
 	
 	nodeChain.prototype = {
 		find: function( selector ) {
-			// TODO: find
+			var results = [];
+			forEach(this, function(e) {
+				AP.push.apply(results, AP.slice.call(e.querySelectorAll(selector), 0).filter(function(e, i, a) {
+					return !~results.indexOf(e);
+				}));
+			})
+			return new nodeChain( results );
 		},
 		each: function( fn ) {
 			return forEach(this, function(e, i) {
 				fn.call(e, i, e);
+			});
+		},
+		is: function( selector ) {
+			return AP.some.call(this, function(e) {
+				return matchesSelector.call(e,selector);
 			});
 		},
 		hasClass: function( className ) {
@@ -86,6 +109,24 @@
 					e.innerHTML = value;
 				});
 			}
+		},
+		css: function( prop, value ) {
+			var cssText = "";
+			if (value === undefined) {
+				if (typeof prop !== "string") {
+					for (var name in prop) {
+						cssText += name + ":" + prop[name]+";"
+					}
+				} else {
+					return this[0].ownerDocument.defaultView.getComputedStyle(this[0], null)[prop];
+				}
+			} else {
+				cssText = prop + ":" + value + ";"
+			}
+			return forEach( this, function(e) {
+				e.style.cssText += cssText;
+			})
+
 		}
 	}
 
@@ -106,7 +147,7 @@
 				donor.innerHTML = subject;
 				nodes = donor.childNodes;
 			} else {
-				nodes = document.querySelectorAll( subject );
+				nodes = doc.querySelectorAll( subject );
 			}
 		} else {
 			if (subject.nodeType) {
